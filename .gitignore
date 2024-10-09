@@ -1,0 +1,5 @@
+# Ignore preprocessed images and segmentations
+/images_preprocessed/
+/LR_segmentations/
+/.venv/
+/unet3d_model.pth/
