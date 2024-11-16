@@ -9,6 +9,7 @@ import os
 import torch.nn.functional as F
 from skimage.transform import resize
 import random
+from monai.losses import DiceLoss
 
 
 #Check if device has GPU/CUDA
@@ -148,7 +149,6 @@ class UNet3D(nn.Module):
 
         # Output layer
         self.conv_final = nn.Conv3d(64, out_channels, kernel_size=1)
-        self.activation = nn.Softmax(dim=1)  # Use dim=1 for channel-wise softmax
 
     def forward(self, x):
         # Encoder
@@ -168,36 +168,12 @@ class UNet3D(nn.Module):
 
         # Output
         out = self.conv_final(dec1)
-        out = self.activation(out)
 
         return out
 
 #Functions
-
-#Dice Loss Function
-
-
-def dice_loss(pred, target, smooth=1e-5, background=False): #too gauge similarity between predicted and ground truth
-    num_classes = pred.size(1)
-    target_one_hot = F.one_hot(target, num_classes=num_classes)
-    target_one_hot = target_one_hot.permute(0, 4, 1, 2, 3).float()
-
-    if not background:
-        pred = pred[:, 1:, ...]
-        target_one_hot = target_one_hot[:, 1:, ...]
-
-    pred_flat = pred.contiguous().view(pred.size(0), -1)
-    target_flat = target_one_hot.contiguous().view(target_one_hot.size(0), -1)
-
-    intersection = (pred_flat * target_flat).sum(dim=1)
-    denominator = pred_flat.sum(dim=1) + target_flat.sum(dim=1)
-
-    dice_score = (2. * intersection + smooth) / (denominator + smooth)
-    dice_loss = 1 - dice_score.mean()
-
-    return dice_loss
-
-
+criterion_ce = nn.CrossEntropyLoss()
+criterion_dice = DiceLoss(to_onehot_y=True, softmax=True)
 
 #Main Execution
 if __name__ == "__main__":
@@ -241,6 +217,7 @@ if __name__ == "__main__":
 
     # To record loss
     epoch_losses = []
+  
 
     for epoch in range(num_epochs):
         model.train()
@@ -251,11 +228,13 @@ if __name__ == "__main__":
             masks = masks.to(device)
 
             optimizer.zero_grad()
-            outputs = model(images)  # Outputs with softmax applied
-
+            outputs = model(images)  
             # Compute Dice loss
-            loss = dice_loss(outputs, masks, background=False)
 
+            loss_ce = criterion_ce(outputs, masks)
+            loss_dice = criterion_dice(outputs, masks)
+            loss = loss_ce + loss_dice 
+        
             loss.backward()
             optimizer.step()
 
