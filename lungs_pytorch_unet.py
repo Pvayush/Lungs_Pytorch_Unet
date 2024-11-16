@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from skimage.transform import resize
 import random
 from monai.losses import DiceLoss
+from monai.metrics import DiceMetric
 
 
 #Check if device has GPU/CUDA
@@ -254,21 +255,22 @@ if __name__ == "__main__":
     plt.xticks(range(1, num_epochs + 1))
     plt.show()
 
+    dice_metric = DiceMetric(to_onehot_y=True, include_background=True, reduction="mean")
+
     # Evaluation on test set
     model.eval()
     with torch.no_grad():
-        test_loss = 0
+        dice_metric.reset()
         for images, masks in test_loader:
             images = images.to(device)
             masks = masks.to(device)
 
             outputs = model(images)
+            dice_metric(y_pred=outputs, y= masks)
 
-            loss = dice_loss(outputs, masks, background=False)
-            test_loss += loss.item()
-
-        avg_test_loss = test_loss / len(test_loader)
-        print(f"Test Loss: {avg_test_loss:.4f}")
+        dice_score = dice_metric.aggregate().item()
+        print(f"Validation Dice Score: {dice_score:.4f}")
+        dice_metric.reset()
 
     # Save the model
     torch.save(model.state_dict(), 'unet3d_model.pth')
